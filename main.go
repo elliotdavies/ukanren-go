@@ -19,6 +19,22 @@ func main() {
 	map1[Var{1}] = Var{2}
 	map1[Var{2}] = Lit(3)
 	fmt.Println("Should be 3:", resolve(Var{1}, map1))
+
+	res1, ok := unify(Var{1}, Lit(3), map1)
+	fmt.Print("Should have unified successfully: ")
+	if ok {
+		fmt.Println("correct", res1)
+	} else {
+		fmt.Println("Uh oh")
+	}
+
+	res2, ok := unify(Var{1}, Lit(4), map1)
+	fmt.Print("Should not have unified successfully: ")
+	if ok {
+		fmt.Println("Uh oh")
+	} else {
+		fmt.Println("correct", res2)
+	}
 }
 
 // Nearest thing to a sum type we're going to get
@@ -49,17 +65,17 @@ func isVar(v Type) bool {
 
 // Cons cells
 type Cons struct {
-	head Lit
+	head Type
 	tail *Cons
 }
 
 func (c Cons) isType() {}
 
-func cons(head Lit, tail *Cons) Cons {
+func cons(head Type, tail *Cons) Cons {
 	return Cons{head, tail}
 }
 
-func head(c Cons) Lit {
+func head(c Cons) Type {
 	return c.head
 }
 
@@ -94,4 +110,39 @@ func resolve(term Type, substMap Map) Type {
 		return resolve(substMap[term], substMap)
 	}
 	return term
+}
+
+// Try to unify two terms and update the substitution map accordingly
+// In case of failure return nil
+func unify(t1 Type, t2 Type, substMap Map) (Map, bool) {
+	t1 = resolve(t1, substMap)
+	t2 = resolve(t2, substMap)
+	// If both equal, don't need to do anything
+	if isVar(t1) && isVar(t2) && t1 == t2 {
+		return substMap, true
+	} else if isVar(t1) {
+		// Extend map with mapping from t1 to t2
+		return extend(substMap, t1, t2), true
+	} else if isVar(t2) {
+		// Extend map with mapping from t2 to t1
+		return extend(substMap, t2, t1), true
+	} else if isCons(t1) && isCons(t2) {
+		// If both cons cells then try to unify elements in the lists
+		// @TODO Scrap isCons method?
+		t1, t1ok := t1.(Cons)
+		t2, t2ok := t2.(Cons)
+		if t1ok && t2ok {
+			substMap, ok := unify(head(t1), head(t2), substMap)
+			if ok {
+				return unify(tail(t1), tail(t2), substMap)
+			}
+			return nil, false
+		}
+	} else if t1 == t2 {
+		// If equal at this stage, no need to do anything
+		return substMap, true
+	}
+
+	// Fail - could not unify
+	return nil, false
 }
