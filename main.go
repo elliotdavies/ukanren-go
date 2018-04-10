@@ -35,6 +35,8 @@ func main() {
 	} else {
 		fmt.Println("correct", res2)
 	}
+
+	fmt.Println("Eq goal - should see 1:1 in map:", *callGoal(eq(Var{1}, Lit(1))))
 }
 
 // Nearest thing to a sum type we're going to get
@@ -145,4 +147,35 @@ func unify(t1 Type, t2 Type, substMap Map) (Map, bool) {
 
 	// Fail - could not unify
 	return nil, false
+}
+
+// Goals
+type State struct {
+	substMap Map
+	count    int
+}
+
+func (s State) isType() {}
+
+func newStream(s State) *Cons {
+	stream := cons(s, nil)
+	return &stream
+}
+
+type Goal func(State) *Cons
+
+func callGoal(g Goal) *Cons {
+	emptyState := State{make(Map), 0}
+	return g(emptyState)
+}
+
+// Equality goal - if terms unify they are equal
+func eq(t1 Type, t2 Type) Goal {
+	return func(s State) *Cons {
+		substMap, ok := unify(t1, t2, s.substMap)
+		if ok {
+			return newStream(State{substMap, s.count})
+		}
+		return nil
+	}
 }
