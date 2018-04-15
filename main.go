@@ -43,6 +43,24 @@ func main() {
 	}
 	res := callGoal(callFresh(lam))
 	fmt.Println("callFresh eq goal - should see 1:1 in map:", *res)
+
+	lam = func(t Type) Goal {
+		return either(eq(t, Lit(23)), eq(t, Lit(42)))
+	}
+	disj := callGoal(callFresh(lam))
+	fmt.Println("disj", head(*disj), *tail(*disj))
+
+	lam = func(t Type) Goal {
+		return both(eq(t, Lit(23)), eq(t, Lit(42)))
+	}
+	conj1 := callGoal(callFresh(lam))
+	fmt.Println("conj1", conj1)
+
+	lam = func(t Type) Goal {
+		return both(eq(t, Lit(23)), eq(t, Lit(23)))
+	}
+	conj2 := callGoal(callFresh(lam))
+	fmt.Println("conj2", *conj2)
 }
 
 // Nearest thing to a sum type we're going to get
@@ -155,7 +173,7 @@ func unify(t1 Type, t2 Type, substMap Map) (Map, bool) {
 	return nil, false
 }
 
-// Goals
+// State
 type State struct {
 	substMap Map
 	count    int
@@ -163,12 +181,16 @@ type State struct {
 
 func (s State) isType() {}
 
-func newStream(s State) *Cons {
+// Streams
+type Stream *Cons
+
+func newStream(s State) Stream {
 	stream := cons(s, nil)
 	return &stream
 }
 
-type Goal func(State) *Cons
+// Goals
+type Goal func(State) Stream
 
 func callGoal(g Goal) *Cons {
 	emptyState := State{make(Map), 0}
@@ -176,20 +198,57 @@ func callGoal(g Goal) *Cons {
 }
 
 func callFresh(f func(Type) Goal) Goal {
-	return func(s State) *Cons {
+	return func(s State) Stream {
 		goal := f(Var{s.count})
 		newState := State{s.substMap, s.count + 1}
 		return goal(newState)
 	}
 }
 
+func append(s1 Stream, s2 Stream) Stream {
+	if s1 == nil {
+		return s2
+	}
+	stream := cons(head(*s1), append(tail(*s1), s2))
+	return &stream
+}
+
+func mappend(g Goal, s Stream) Stream {
+	if s == nil {
+		return nil
+	}
+
+	h := head(*s)
+	state, ok := h.(State)
+	if !ok {
+		return nil
+	}
+
+	stream := append(g(state), mappend(g, tail(*s)))
+	return stream
+}
+
 // Equality goal - if terms unify they are equal
 func eq(t1 Type, t2 Type) Goal {
-	return func(s State) *Cons {
+	return func(s State) Stream {
 		substMap, ok := unify(t1, t2, s.substMap)
 		if ok {
 			return newStream(State{substMap, s.count})
 		}
 		return nil
+	}
+}
+
+// Disjunction
+func either(g1 Goal, g2 Goal) Goal {
+	return func(s State) Stream {
+		return append(g1(s), g2(s))
+	}
+}
+
+// Conjunction
+func both(g1 Goal, g2 Goal) Goal {
+	return func(s State) Stream {
+		return mappend(g2, g1(s))
 	}
 }
