@@ -37,6 +37,12 @@ func main() {
 	}
 
 	fmt.Println("Eq goal - should see 1:1 in map:", *callGoal(eq(Var{1}, Lit(1))))
+
+	lam := func(t Type) Goal {
+		return eq(t, Lit(23))
+	}
+	res := callGoal(callFresh(lam))
+	fmt.Println("callFresh eq goal - should see 1:1 in map:", *res)
 }
 
 // Nearest thing to a sum type we're going to get
@@ -167,6 +173,14 @@ type Goal func(State) *Cons
 func callGoal(g Goal) *Cons {
 	emptyState := State{make(Map), 0}
 	return g(emptyState)
+}
+
+func callFresh(f func(Type) Goal) Goal {
+	return func(s State) *Cons {
+		goal := f(Var{s.count})
+		newState := State{s.substMap, s.count + 1}
+		return goal(newState)
+	}
 }
 
 // Equality goal - if terms unify they are equal
